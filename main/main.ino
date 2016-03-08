@@ -19,6 +19,8 @@ AtCommandRequest atRequest = AtCommandRequest(cmd);
 
 AtCommandResponse atResponse = AtCommandResponse();
 
+bool isOrigin =true;
+long defaultWait = 0;
 void setup() {
   // put your setup code here, to run once:
   DebugSerial.begin(115200);
@@ -253,7 +255,14 @@ bool sendPacketFurther(int index) {
   //DebugSerial.println(n._sh,HEX);
   //DebugSerial.println(n._sl,HEX);
   txRequest.setAddress64(addr);
-  uint8_t payload[] = {'H', 'e', 'l', 'l', 'o', ',', ' ', 'w', 'o', 'r', 'l', 'd', '!', (nodes[index]._ni + 0x30)};
+  uint8_t sig = random(2);
+  DebugSerial.print(F("Signal: "));
+  DebugSerial.println(sig);
+  uint8_t niAdjusted = 0x9F & nodes[index]._ni;
+  uint8_t payloadCore = (sig << 7) | niAdjusted;
+  DebugSerial.print(F("Payload Combined: "));
+  DebugSerial.println(payloadCore,HEX);
+  uint8_t payload[] = {payloadCore};
   txRequest.setPayload(payload, sizeof(payload));
 
   // And send it
@@ -273,13 +282,12 @@ unsigned long last_tx_time = 0;
 void loop() {
   // Check the serial port to see if there is a new packet available
   xbee.loop();
-
   // Send a packet every 10 seconds
   if (millis() - last_tx_time > 10000) {
     last_tx_time = millis();
     sendPacket();
-
   }
+    
 }
 
 

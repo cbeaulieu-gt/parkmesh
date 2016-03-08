@@ -11,7 +11,7 @@ AltSoftSerial SoftSerial;
 #if __BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__
 #error This code relies on little endian integers!
 #endif
-const uint8_t MAX_NODES = 2;
+const uint8_t MAX_NODES = 3;
 Node nodes[MAX_NODES];
 XBeeWithCallbacks xbee;
 uint8_t cmd[] = {'F', 'N'};
@@ -22,6 +22,7 @@ AtCommandResponse atResponse = AtCommandResponse();
 void setup() {
   // put your setup code here, to run once:
   DebugSerial.begin(115200);
+  randomSeed(analogRead(0));
 
   XBeeSerial.begin(9600);
   xbee.setSerial(XBeeSerial);
@@ -31,11 +32,14 @@ void setup() {
   DebugSerial.write(cmd, 2);
   DebugSerial.println(F(" command sent to Xbee"));
 
-  GetAllResponses();
+  findNodes();
   for (Node n : nodes)
   {
-    DebugSerial.println(n._sh, HEX);
-    DebugSerial.println(n._sl, HEX);
+    DebugSerial.print(F("SH: "));
+    DebugSerial.print(n._sh, HEX);
+    DebugSerial.print(F(";  SL: "));
+    DebugSerial.print(n._sl, HEX);
+    DebugSerial.print(F(";  NI: "));
     DebugSerial.println(n._ni);
   }
   // GetResponse();
@@ -43,7 +47,7 @@ void setup() {
 }
 
 
-void GetAllResponses()
+void findNodes()
 {
   int index = 0;
   while (xbee.readPacket(5000))
@@ -211,7 +215,14 @@ void sendPacket() {
   //DebugSerial.println(n._sh,HEX);
   //DebugSerial.println(n._sl,HEX);
   txRequest.setAddress64(addr);
-  uint8_t payload[] = {'H', 'e', 'l', 'l', 'o', ',', ' ', 'w', 'o', 'r', 'l', 'd', '!', (nodes[altInd]._ni + 0x30)};
+  uint8_t sig = random(2);
+  DebugSerial.print(F("Signal: "));
+  DebugSerial.println(sig);
+  uint8_t niAdjusted = 0x9F & nodes[altInd]._ni;
+  uint8_t payloadCore = (sig << 7) | niAdjusted;
+  DebugSerial.print(F("Payload Combined: "));
+  DebugSerial.println(payloadCore,HEX);
+  uint8_t payload[] = {payloadCore};
   txRequest.setPayload(payload, sizeof(payload));
 
   // And send it

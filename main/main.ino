@@ -277,6 +277,52 @@ bool sendPacketFurther(int index) {
     return false;
   }
 }
+
+void serialDump() {
+  if (XBeeSerial.available()) {
+    char data[8];
+    uint8_t column;
+
+    for (column = 0; column < sizeof(data); ++column) {
+      // Wait up to 1 second for more data before writing out the line
+      uint32_t start = millis();
+      while (!XBeeSerial.available() && (millis() - start) < 1000) /* nothing */;
+      if (!XBeeSerial.available())
+        break;
+
+      // Start of API packet, break to a new line
+      // In transparent mode, this causes every ~ to start a newline,
+      // but that's ok.
+      if (column && XBeeSerial.peek() == 0x7E)
+        break;
+
+      // Read one byte and print it in hexadecimal. Store its value in
+      // data[], or store '.' is the byte is not printable. data[] will
+      // be printed later as an "ASCII" version of the data.
+      uint8_t b = XBeeSerial.read();
+      data[column] = isprint(b) ? b : '.';
+      if (b < 0x10) DebugSerial.write('0');
+      DebugSerial.print(b, HEX);
+      DebugSerial.write(' ');
+    }
+
+    // Fill any missing columns with spaces to align lines
+    for (uint8_t i = column; i < sizeof(data); ++i)
+      Serial.print(F("   "));
+
+    // Finalize the line by adding the raw printable data and a newline.
+    DebugSerial.write(' ');
+    DebugSerial.write(data, column);
+    DebugSerial.println();
+  }
+
+  // Forward any data from the computer directly to the XBee module
+  if (DebugSerial.available())
+    XBeeSerial.write(DebugSerial.read());
+}
+
+
+
 unsigned long last_tx_time = 0;
 
 void loop() {

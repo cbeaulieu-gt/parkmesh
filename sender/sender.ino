@@ -56,7 +56,7 @@ void getNI()
   uint8_t niCmd[] = {'N', 'I'};
   AtCommandRequest req(niCmd);
   xbee.send(req);
-  while (xbee.readPacket(5000)) 
+  while (xbee.readPacket(5000))
   {
     xbee.getResponse().getAtCommandResponse(atResponse);
     uint8_t val;
@@ -72,6 +72,88 @@ void getNI()
       }
     }
   }
+}
+void findNodes()
+{
+  int index = 0;
+  while (xbee.readPacket(5000))
+  {
+
+    if (xbee.getResponse().getApiId() == AT_COMMAND_RESPONSE)
+    {
+      xbee.getResponse().getAtCommandResponse(atResponse);
+
+      //Check status of response.
+      DebugSerial.println(atResponse.getStatus(), HEX);
+
+      //Check to see if the command we got a response for matches what was expected.
+      if (atResponse.isOk())
+      {
+        DebugSerial.write(cmd, 2);
+        DebugSerial.println(F(" Command was successful."));
+
+        if (atResponse.getValueLength() > 0)
+        {
+          DebugSerial.println(F("Command value length is "));
+          DebugSerial.println(atResponse.getValueLength(), DEC);
+
+          DebugSerial.println(F("Command value: "));
+          uint32_t sh = 0;
+          uint32_t sl = 0;
+          for (int i = 2; i < 6; i++)
+          {
+            sh = sh << 8;
+            sh = sh | atResponse.getValue()[i];
+          }
+          for (int i = 6; i < 10; i++)
+          {
+            sl = sl << 8;
+            sl = sl | atResponse.getValue()[i];
+          }
+
+          uint32_t ni = 0;
+          uint8_t val;
+          for (int i = 10; i < atResponse.getValueLength(); i++)
+          {
+            val = atResponse.getValue()[i];
+            if (val != 0x2D)
+            {
+              ni = ni * 10 + (val - 0x30);
+            }
+            else {
+              break;
+            }
+          }
+            nodes[index]._sh  = sh;
+            DebugSerial.print(F("SH: "));
+            DebugSerial.println(sh, HEX);
+
+            nodes[index]._sl = sl;
+            DebugSerial.print(F("SL: "));
+            DebugSerial.println(sl, HEX);
+
+            nodes[index]._ni = ni;
+            DebugSerial.print(F("NI: "));
+            DebugSerial.println(ni);
+            index++;
+          
+        }
+
+        DebugSerial.println(F(""));
+      }
+      else
+      {
+        DebugSerial.println(F("The command response does not match expected command."));
+      }
+    }
+    else
+    {
+      DebugSerial.println(F("The response was not succesful."));
+    }
+  }
+
+  DebugSerial.println(F("No more packet found."));
+  //Look for RemoteCommandResponse Packet
 }
 void findNodesunsuccessful()
 {
@@ -114,22 +196,22 @@ void findNodesunsuccessful()
           }
           //if (ni < _myNI && (ni >= (_myNI < MAX_NET_RANGE || ni >= (_myNI - MAX_NET_RANGE))))
           //{
-            uint32_t sh = 0;
-            uint32_t sl = 0;
-            int index = _myNI - ni;
-            for (int i = 2; i < 6; i++)
-            {
-              sh = sh << 8;
-              sh = sh | atResponse.getValue()[i];
-            }
-            for (int i = 6; i < 10; i++)
-            {
-              sl = sl << 8;
-              sl = sl | atResponse.getValue()[i];
-            }
-            nodes[index]._sh  = sh;
-            nodes[index]._sl = sl;
-            nodes[index]._ni = ni;
+          uint32_t sh = 0;
+          uint32_t sl = 0;
+          int index = _myNI - ni;
+          for (int i = 2; i < 6; i++)
+          {
+            sh = sh << 8;
+            sh = sh | atResponse.getValue()[i];
+          }
+          for (int i = 6; i < 10; i++)
+          {
+            sl = sl << 8;
+            sl = sl | atResponse.getValue()[i];
+          }
+          nodes[index]._sh  = sh;
+          nodes[index]._sl = sl;
+          nodes[index]._ni = ni;
           //}
         }
       }

@@ -14,21 +14,21 @@ AltSoftSerial SoftSerial;
 const uint8_t MAX_NODES = 3;
 Node nodes[MAX_NODES];
 XBeeWithCallbacks xbee;
+uint32_t ni = 3;
 uint8_t cmd[] = {'F', 'N'};
-AtCommandRequest atRequest = AtCommandRequest(cmd);
+bool isOrigin = true;
+long defaultWait = 0;
 
 AtCommandResponse atResponse = AtCommandResponse();
-
-bool isOrigin =true;
-long defaultWait = 0;
 void setup() {
   // put your setup code here, to run once:
   DebugSerial.begin(115200);
   randomSeed(analogRead(0));
-
   XBeeSerial.begin(9600);
   xbee.setSerial(XBeeSerial);
-
+  getNI();
+  DebugSerial.println(ni);
+  AtCommandRequest atRequest = AtCommandRequest(cmd);
   //Send Network Discovery Command
   xbee.send(atRequest);
   DebugSerial.write(cmd, 2);
@@ -48,9 +48,29 @@ void setup() {
   sendPacket();
 }
 
-
+void getNI()
+{
+  uint8_t niCmd[] = {'N', 'I'};
+  AtCommandRequest req(niCmd);
+  xbee.send(req);
+  while (xbee.readPacket(5000)) {
+    uint8_t val;
+    for (int i = 0; i < atResponse.getValueLength(); i++)
+    {
+      val = atResponse.getValue()[i];
+      if (val != 0x2D)
+      {
+        ni = ni * 10 + (val - 0x30);
+      }
+      else {
+        break;
+      }
+    }
+  }
+}
 void findNodes()
 {
+
   int index = 0;
   while (xbee.readPacket(5000))
   {
@@ -133,6 +153,7 @@ void findNodes()
 
 void GetResponse()
 {
+
   if (xbee.readPacket(5000))
   {
     if (xbee.getResponse().getApiId() == AT_COMMAND_RESPONSE)
@@ -179,15 +200,6 @@ void GetResponse()
               break;
             }
           }
-          DebugSerial.print(F("SH: "));
-          DebugSerial.println(sh, HEX);
-
-          DebugSerial.print(F("SL: "));
-          DebugSerial.println(sl, HEX);
-
-          DebugSerial.print(F("NI: "));
-          DebugSerial.println(ni);
-
         }
 
         DebugSerial.println(F(""));
@@ -220,10 +232,10 @@ void sendPacket() {
   uint8_t sig = random(2);
   DebugSerial.print(F("Signal: "));
   DebugSerial.println(sig);
-  uint8_t niAdjusted = 0x9F & nodes[altInd]._ni;
+  uint8_t niAdjusted = 0x9F & ni;
   uint8_t payloadCore = (sig << 7) | niAdjusted;
   DebugSerial.print(F("Payload Combined: "));
-  DebugSerial.println(payloadCore,HEX);
+  DebugSerial.println(payloadCore, HEX);
   uint8_t payload[] = {payloadCore};
   txRequest.setPayload(payload, sizeof(payload));
 
@@ -261,7 +273,7 @@ bool sendPacketFurther(int index) {
   uint8_t niAdjusted = 0x9F & nodes[index]._ni;
   uint8_t payloadCore = (sig << 7) | niAdjusted;
   DebugSerial.print(F("Payload Combined: "));
-  DebugSerial.println(payloadCore,HEX);
+  DebugSerial.println(payloadCore, HEX);
   uint8_t payload[] = {payloadCore};
   txRequest.setPayload(payload, sizeof(payload));
 
@@ -277,52 +289,6 @@ bool sendPacketFurther(int index) {
     return false;
   }
 }
-
-void serialDump() {
-  if (XBeeSerial.available()) {
-    char data[8];
-    uint8_t column;
-
-    for (column = 0; column < sizeof(data); ++column) {
-      // Wait up to 1 second for more data before writing out the line
-      uint32_t start = millis();
-      while (!XBeeSerial.available() && (millis() - start) < 1000) /* nothing */;
-      if (!XBeeSerial.available())
-        break;
-
-      // Start of API packet, break to a new line
-      // In transparent mode, this causes every ~ to start a newline,
-      // but that's ok.
-      if (column && XBeeSerial.peek() == 0x7E)
-        break;
-
-      // Read one byte and print it in hexadecimal. Store its value in
-      // data[], or store '.' is the byte is not printable. data[] will
-      // be printed later as an "ASCII" version of the data.
-      uint8_t b = XBeeSerial.read();
-      data[column] = isprint(b) ? b : '.';
-      if (b < 0x10) DebugSerial.write('0');
-      DebugSerial.print(b, HEX);
-      DebugSerial.write(' ');
-    }
-
-    // Fill any missing columns with spaces to align lines
-    for (uint8_t i = column; i < sizeof(data); ++i)
-      Serial.print(F("   "));
-
-    // Finalize the line by adding the raw printable data and a newline.
-    DebugSerial.write(' ');
-    DebugSerial.write(data, column);
-    DebugSerial.println();
-  }
-
-  // Forward any data from the computer directly to the XBee module
-  if (DebugSerial.available())
-    XBeeSerial.write(DebugSerial.read());
-}
-
-
-
 unsigned long last_tx_time = 0;
 
 void loop() {
@@ -333,7 +299,7 @@ void loop() {
     last_tx_time = millis();
     sendPacket();
   }
-    
+
 }
 
 

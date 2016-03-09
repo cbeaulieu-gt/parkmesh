@@ -13,6 +13,8 @@ AltSoftSerial SoftSerial;
 #endif
 const uint8_t MAX_NODES = 3;
 Node nodes[MAX_NODES];
+uint8_t forwardingData[MAX_NODES];
+int forwardingDataIndex;
 XBeeWithCallbacks xbee;
 uint32_t ni = 3;
 uint8_t cmd[] = {'F', 'N'};
@@ -45,7 +47,7 @@ void setup() {
     DebugSerial.println(n._ni);
   }
   // GetResponse();
-  sendPacket();
+  //sendPacket();
 }
 
 void getNI()
@@ -289,17 +291,83 @@ bool sendPacketFurther(int index) {
     return false;
   }
 }
+<<<<<<< HEAD
+=======
+
+bool recievePacket() 
+{
+      DebugSerial.println(F("Calling Recieve Packet"));
+      // Wait up to 1 second for more data before writing out the line
+      uint32_t start = millis();
+      while (!XBeeSerial.available() && (millis() - start) < 1000) /* nothing */;
+      if (!XBeeSerial.available()){
+        DebugSerial.println(F("Nothing found. Exiting recievePacket."));
+        return false;
+      }
+
+      DebugSerial.println(F("Packet found!!"));
+      // Start of API packet, break to a new line
+      // In transparent mode, this causes every ~ to start a newline,
+      // but that's ok.
+      if (XBeeSerial.peek() != 0x7E)
+        return false;
+
+      // Read one byte and print it in hexadecimal. Store its value in
+      // data[], or store '.' is the byte is not printable. data[] will
+      // be printed later as an "ASCII" version of the data.
+      uint8_t preData = 0;
+      while (preData != 0xC1)
+      {
+        preData = XBeeSerial.read();
+        DebugSerial.println(preData, HEX);
+      }
+      
+      DebugSerial.println(F("Found start of data. Beginning to populate forwarding array."));
+      forwardingDataIndex = 0;
+      uint8_t b;
+      while (XBeeSerial.available())
+      {
+        if (forwardingDataIndex == 0)
+          b = XBeeSerial.read();
+        
+        forwardingData[forwardingDataIndex++] = b;
+        b = XBeeSerial.read();
+        DebugSerial.println(b, HEX);
+      }
+      DebugSerial.println(F("Finished reading data."));
+  // Forward any data from the computer directly to the XBee module
+  if (DebugSerial.available())
+    XBeeSerial.write(DebugSerial.read());
+  return true;
+}
+
+
+
+>>>>>>> origin/master
 unsigned long last_tx_time = 0;
 
 void loop() {
   // Check the serial port to see if there is a new packet available
   xbee.loop();
   // Send a packet every 10 seconds
+<<<<<<< HEAD
   if (millis() - last_tx_time > 10000) {
     last_tx_time = millis();
     sendPacket();
   }
 
+=======
+    bool hasRecieved = recievePacket();
+
+    if (hasRecieved)
+    {
+      DebugSerial.println(F("Printing Forwarding Data"));
+      for (uint8_t value: forwardingData)
+      {   
+        DebugSerial.println(value, HEX);
+      }  
+    }
+>>>>>>> origin/master
 }
 
 

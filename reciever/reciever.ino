@@ -2,9 +2,9 @@
 #include <Printers.h>
 #include <AltSoftSerial.h>
 #include <Node.h>
+#include<ForwardingHandler.h>
 // Serial ports to use
 AltSoftSerial SoftSerial;
-
 #define DebugSerial Serial
 #define XBeeSerial SoftSerial
 
@@ -13,8 +13,12 @@ AltSoftSerial SoftSerial;
 #endif
 const uint8_t MAX_NODES = 3;
 Node nodes[MAX_NODES];
+
+
 uint8_t forwardingData[MAX_NODES];
 int forwardingDataIndex;
+
+ForwardingHandler forwardingHandler = ForwardingHandler(MAX_NODES);
 XBeeWithCallbacks xbee;
 uint8_t cmd[] = {'F', 'N'};
 AtCommandRequest atRequest = AtCommandRequest(cmd);
@@ -305,7 +309,9 @@ bool recievePacket()
       while (preData != 0xC1)
       {
         preData = XBeeSerial.read();
-        DebugSerial.println(preData, HEX);
+        DebugSerial.print(preData, HEX);
+        start = millis();
+        while (!XBeeSerial.available() && (millis() - start) < 1000) /* nothing */;
       }
       
       DebugSerial.println(F("Found start of data. Beginning to populate forwarding array."));

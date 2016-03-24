@@ -16,32 +16,60 @@ XBeeWithCallbacks xbee;
 
 //+++++++++++++++++++++++++++++++++++++++++++++++++
 
-bool debugModeEnabled = true;
 
+//List of Used AT Commands+++++++++++++++++++++++++
 
-const uint8_t MAX_NODES = 10;
-Node LocalNode;
-Node AllNodes[MAX_NODES];
-Node DestinationNodes[3];
-int neighbors = 0;
-
-uint8_t transmitData[MAX_NODES];
-int transmitDataIndex = 0;
-
-long defaultWait = 0;
-unsigned long last_tx_time = 0;
-
-//Commands
 uint8_t FN[] = { 'F', 'N' }; //Find Network Devices
 uint8_t ND[] = { 'N', 'D' }; //Network Discovery
 uint8_t NO[] = { 'N', 'O' }; //Network Discovery Options
 uint8_t SH[] = { 'S', 'H' }; //Serial High
 uint8_t SL[] = { 'S', 'L' }; //Serial Low
 
+//List of Internal Commands
+struct Commands {
+	int SetOrigin = 6;
+};
+const Commands CommandList;
+
+//Network Variables++++++++++++++++++++++++++++++++
+
+//These relate to other nodes in the network. Put anything here
+//that is not specific to this particular node or would need to be set
+//for all nodes in the network.
+
+const int MAX_NODES = 10;
+Node AllNodes[MAX_NODES];
+Node DestinationNodes[3];
+const int maxCommandPacketSize = 20;
+
+//This will be changed later, but at worst case each node will know this value.
+uint8_t originNodeIdentifier = MAX_NODES; 
+
+//Local Node+++++++++++++++++++++++++++++++++++++++
+
+//Specfic only to this node. Operation specfic variables should be
+//placed here.
+
+Node LocalNode;
+uint8_t dataPacket[MAX_NODES];
+uint8_t commandPacket[maxCommandPacketSize];
+int transmitDataIndex = 0;
+int neighbors = 0;
+unsigned long cycleStartTime = 0;
+unsigned long cycleDuration = 0;
 
 // For now we are counting down towards the hub. This means that the origin
-// node will have a Node ID equal to that of the MAX_NODES in the network.
-bool isOrigin = true;
+// node will set itself if it does not hear from any nodes with a higher
+//NI than itself.
+bool isOrigin = false;
+
+//Others++++++++++++++++++++++++++++++++++++++++++++
+
+bool debugModeEnabled = true;
+
+//=================================================================================================
+//=================================================================================================
+
 
 // This function will allow for all debug statements to be toggled On/Off
 // using the debugModeEnabled boolean.
@@ -68,8 +96,76 @@ void DebugSerialTest(int value, char* type)
 	}
 }
 
-void GetLocalNodeInformation() 
+//Determines if this node is the origin node, i.e. the furthest node away from the hub
+//and the node that will be the first to transmit data.
+void IsOrigin()
 {
+	DebugSerial.println(F("Checking to see if this is the origin node."));
+
+	//Scan through all nodes we heard from and compare the Node Identifiers. If after scanning
+	//we have found no nodes with a hgiher NI than ourselves than we must be the origin.
+	bool originCandidate = true;
+	for (int index = 0; index < MAX_NODES; index++)
+	{
+		DebugSerial.println(AllNodes[index].nodeIdentifier, DEC);
+		if (LocalNode.nodeIdentifier < AllNodes[index].nodeIdentifier) 
+		{
+			originCandidate = false;
+			break;
+		}
+	}
+
+	if (originCandidate) 
+	{
+		isOrigin = true;
+		originNodeIdentifier = LocalNode.nodeIdentifier;
+		DebugSerial.println(F("This is the ORIGIN node."));
+		DebugSerial.println(F(""));
+	}
+	else 
+	{
+		DebugSerial.println(F("This is NOT the origin node."));
+		DebugSerial.println(F(""));
+	}
+}
+
+//Sends a broadcast message to all nodes in the network informing all nodes that this is the origin
+//node. Contains the NI of the announcer.s
+bool AnnounceOrigin() 
+{
+	DebugSerial.println(F("Preparing to announce origin node."));
+
+	//Recieving nodes will listen for this code and upon getting it will store this node identifer
+	//as the origin node
+	uint8_t data[] = { '0', '1', '1','0', LocalNode.nodeIdentifier };
+	uint32_t destinationSerialHigh = 0x00000000;
+	uint32_t desitnationSerialLow = 0x0000FFFF;
+	
+	Node broadcastNode = Node();
+	broadcastNode.nodeIdentifier = -1;
+	broadcastNode.serialNumberHigh = destinationSerialHigh;
+	broadcastNode.serialNumberLow = desitnationSerialLow;
+
+	bool announcementSuccessful = SendPacket(broadcastNode, data, sizeof(data));
+	if (announcementSuccessful) 
+	{
+		DebugSerial.println(F("Announcement succesful."));
+		return true;
+	}
+	else 
+	{
+		DebugSerial.println(F("Announcement failed."));
+		return false;
+	}
+}
+
+bool GetLocalNodeInformation() 
+{
+	//If both of these become true the function was succesful and can return 
+	//true at the end.
+	bool gotSerialLow = false;
+	bool gotSerialHigh = false;
+
 	AtCommandRequest atCommandRequest = AtCommandRequest(SH);
 	AtCommandResponse atCommandResponse = AtCommandResponse();
 
@@ -114,6 +210,7 @@ void GetLocalNodeInformation()
 					//Store the value into the local node.
 					LocalNode.serialNumberHigh = serialHigh;
 					DebugSerial.println("");
+					gotSerialHigh = true;
 				}
 				DebugSerial.println(F(""));
 			}
@@ -174,8 +271,10 @@ void GetLocalNodeInformation()
 					//Store the value into the local node.
 					LocalNode.serialNumberLow = serialLow;
 					DebugSerial.println("");
+					gotSerialLow = true;
 				}
 				DebugSerial.println(F(""));
+
 			}
 			else
 			{
@@ -187,9 +286,19 @@ void GetLocalNodeInformation()
 			DebugSerial.println(F("The response was not succesful."));
 		}
 	}
+
+	//Both need to work in order for the function to return true.
+	if (gotSerialHigh && gotSerialLow) 
+	{
+		return true;
+	}
+	else 
+	{
+		return false;
+	}
 }
 
-void SetNetworkDiscoveryOptions() 
+bool SetNetworkDiscoveryOptions() 
 {
 	AtCommandRequest atCommandRequest = AtCommandRequest(NO);
 	AtCommandResponse atCommandResponse = AtCommandResponse();
@@ -234,6 +343,7 @@ void SetNetworkDiscoveryOptions()
 					DebugSerial.println("");
 				}
 				DebugSerial.println(F(""));
+				return true;
 			}
 			else
 			{
@@ -245,20 +355,31 @@ void SetNetworkDiscoveryOptions()
 			DebugSerial.println(F("The response was not succesful."));
 		}
 	}
+
+	return false;
 }
 
 //Prints the array of nodes found in the FindNeighbor(FN) command.
 void PrintNodeArray() 
 {
-	for (Node n : AllNodes)
+	DebugSerial.println(F("Node Response List."));
+
+	for (Node node : AllNodes)
 	{
-		DebugSerial.print(F("SH: "));
-		DebugSerial.print(n.serialNumberHigh, HEX);
-		DebugSerial.print(F(";  SL: "));
-		DebugSerial.print(n.serialNumberLow, HEX);
-		DebugSerial.print(F(";  NI: "));
-		DebugSerial.println(n.nodeIdentifier, DEC);
+		//Since the whole array is pre-allocated we only want to display
+		//entries that actually contain information.
+		if (node.serialNumberHigh != 0) 
+		{
+			DebugSerial.print(F("SH: "));
+			DebugSerial.print(node.serialNumberHigh, HEX);
+			DebugSerial.print(F(";  SL: "));
+			DebugSerial.print(node.serialNumberLow, HEX);
+			DebugSerial.print(F(";  NI: "));
+			DebugSerial.println(node.nodeIdentifier, DEC);
+		}
 	}
+
+	DebugSerial.println("");
 }
 
 //Sorts the array of found nodes by the NodeIdentifiers from largest to smallest.
@@ -281,18 +402,22 @@ void SortNodeArray()
 }
 
 //Finds all immediate nieghbors of the node and stores their Serial Numbers (High and Low) an 
-//the Node Identifier into an array. Note that this does not discover the entire network. 
-//Only nodes within a single hop of the source can respond.
-void FindNodes()
+//the Node Identifier into an array. Note that this discovers all nodes in the netowrk, so the results
+//will need to be filtered later to select proper nieghbors.
+bool FindNodes()
 {
-	AtCommandRequest atCommandRequest_FN = AtCommandRequest(ND);
+	bool gotResponse = false;
+
+	AtCommandRequest atCommandRequest = AtCommandRequest(FN);
 	AtCommandResponse atCommandResponse = AtCommandResponse();
 	
 	//Send Network Discovery Command
-	xbee.send(atCommandRequest_FN);
-	DebugSerial.println(F("FindNetwork(FN) command sent to Xbee."));
+	xbee.send(atCommandRequest);
+	DebugSerial.println(F("FindNeighbors(FN) command sent to Xbee."));
 
 	int index = 0; 
+
+	//This should be long since there is a high potential for congestion during this phase of the setup.
 	while (xbee.readPacket(10000))
 	{
 		//Check to see if the command we got a response for matches what was expected.
@@ -336,8 +461,7 @@ void FindNodes()
 					}
 
 					//Prepare to capture the NodeIdentifier. This requries a little extra work
-					//because the location of the identifier is variable, and the length can also
-					//change once the beginning is found.
+					//because the location of the identifier and the length are both variable.
 
 					uint32_t nodeIdentifier = 0;
 					uint8_t val;
@@ -376,7 +500,6 @@ void FindNodes()
 					{
 						val = atCommandResponse.getValue()[index];
 						nodeIdentifier = nodeIdentifier * 10 + (val - 0x30);
-
 					}
 
 					//If these are both equal we found the response from the local node and can store the
@@ -401,7 +524,12 @@ void FindNodes()
 						AllNodes[index].nodeIdentifier = nodeIdentifier;
 						DebugSerial.print(F("NI: "));
 						DebugSerial.println(nodeIdentifier);
+
+						//This is in here since we dont count a response from ourself, we only care 
+						//about external nodes.
+						gotResponse = true;
 					}
+
 					index++;
 				}
 
@@ -409,22 +537,23 @@ void FindNodes()
 			}
 			else
 			{
-				DebugSerial.println(F("The command response does not match expected command."));
+				DebugSerial.println(F("The command response does not match what was expected."));
 			}
 		}
 		else
 		{
-			DebugSerial.println(F("The response was not succesful."));
+			DebugSerial.println(F("The response was not successful."));
 		}
 	}
 
 	DebugSerial.println(F("No more packet founds."));
+	return gotResponse;
 
 }
 
 //Extracts potential destination nodes from the list of all nodes that responded
 //to the Network Discovery command.
-void SelectNeighbors() 
+bool SelectNeighbors() 
 {
 	//Note that the array has been pre-sorted (biggest to smallest) so we can take the
 	//first 3 entries we encounter that satisfy the conditions without worrying about 
@@ -452,6 +581,11 @@ void SelectNeighbors()
 	if (nodesSelected == 0) 
 	{
 		DebugSerial.println(F("No suitable neighbors found."));
+		return false;
+	}
+	else 
+	{
+		return true;
 	}
 }
 
@@ -480,112 +614,166 @@ void AppendSensorData()
 	//There is no need to check for size as the array is predefined
 	//to be able to hold an entry for every node in the network and no node will ever be
 	//able to speak with all other nodes.
-	transmitData[transmitDataIndex] = payload;
+	dataPacket[transmitDataIndex] = payload;
 }
 
-void SendPacket() 
+//Sends data (both sensor and forwarding data) to the next node in the chain. Will attempt to send
+//to each destination node in succession until it either succeeds or runs out of destination nodes.
+bool TransmitData()
 {
 	int index = 0;
-	//THe request and the data are independent of the specific node we are trying to send to
-	//so they can be delcared outside of the loop
-	ZBTxRequest transmitRequest;
-	transmitRequest.setPayload(transmitData, sizeof(sizeof(uint8_t)*transmitDataIndex));
+	bool packetSent = false;
 
-	//The status will be used to determine whether or not the transmission was succesfull.
-	//For now we start with a value that cannot be returned normally.
-	uint8_t status = -1;
+	//Because of the way we are passing variables we need a temporary array to store the data we are 
+	//sending
+	uint8_t *temp = new uint8_t[transmitDataIndex];
+	for (int index = 0; index < transmitDataIndex; index++) 
+	{
+		temp[index] = dataPacket[index];
+	}
 
 	//This loop will attempt to send the data to the next node, whose information is located in
-	//the array populated by ND. It will keep attempting to do so until it either succeeds in 
-	//transmitting to one, or it reaches the end of the list.
-	do
+	//the array of selected neighbors. It will keep attempting to do so until it either succeeds in 
+	//transmitting to one, or it reaches the end of the list of potential recipients.
+	while (packetSent == false && index < sizeof(DestinationNodes))
 	{
-		//These will change based on the target so they need to be declared inside of the loop.
-		uint64_t address = (uint64_t)DestinationNodes[index].serialNumberHigh << 32 | (uint64_t)DestinationNodes[index].serialNumberLow;
-		transmitRequest.setAddress64(address);
+		packetSent = SendPacket(DestinationNodes[index], temp, sizeof(temp));
+		index++;
+	}
+}
 
-		//For now wait 5 seconds. Might want to lower this for the full network configuration.
-		status = xbee.sendAndWait(transmitRequest, 5000);
-		
-		DebugSerial.print(F("Target Information: "));
-		DebugSerial.print(F("Node Identifier:"));
-		DebugSerial.println(DestinationNodes[index].nodeIdentifier);
-		DebugSerial.print(F("Serial High:"));
-		DebugSerial.println(DestinationNodes[index].serialNumberHigh, HEX);
-		DebugSerial.print(F("Serial Low:"));
-		DebugSerial.println(DestinationNodes[index].serialNumberLow, HEX);
+//Attemmpts to send a single packet. Can do either targeted or broadcast transmissions.
+bool SendPacket(Node targetNode, uint8_t data[], uint8_t dataSize) 
+{
 
-		if (status != 0)
-		{
-			DebugSerial.println("Transmission Error.");
-		}	
-		else
-		{
-			DebugSerial.println("Transmission Success.");
-		}
+	//The request and the data are independent of the specific node we are trying to send to
+	//so they can be declared outside of the loop.
+	ZBTxRequest transmitRequest;
+	transmitRequest.setPayload(data, dataSize);
 
+	//These will change based on the target so they need to be declared inside of the loop.
+	uint64_t address = (uint64_t)targetNode.serialNumberHigh << 32 | (uint64_t)targetNode.serialNumberLow;
+	transmitRequest.setAddress64(address);
+
+	DebugSerial.print(F("Target Information: "));
+	DebugSerial.print(F("Node Identifier:"));
+	DebugSerial.println(targetNode.nodeIdentifier);
+	DebugSerial.print(F("Serial High:"));
+	DebugSerial.println(targetNode.serialNumberHigh, HEX);
+	DebugSerial.print(F("Serial Low:"));
+	DebugSerial.println(targetNode.serialNumberLow, HEX);
+
+	//For now wait 5 seconds. Might want to lower this for the full network configuration.
+	uint8_t status = xbee.sendAndWait(transmitRequest, 5000);
+
+	if (status != 0)
+	{
+		DebugSerial.println("Transmission Error.");
 		DebugSerial.print(F("Status: 0x"));
 		DebugSerial.println(status, HEX);
-
-		//DON'T FORGET to increment index.
-		index++;
-		
-	} while (status != 0 && index < sizeof(DestinationNodes));
+		return false;
+	}	
+	else
+	{
+		DebugSerial.println("Transmission Success.");
+		DebugSerial.print(F("Status: 0x"));
+		DebugSerial.println(status, HEX);
+		return true;
+	}
 }
-/*
-bool recievePacket()
+
+//Waits for a data acket for the specified time interval.
+bool WaitForDataPacket(unsigned long waitTime)
+{
+	return RecievePacket(waitTime);
+}
+
+//Waits for a command packet for the specified time interval.
+bool WaitForCommandPacket(unsigned long waitTime) 
+{
+	bool packetRecieved = false;
+	packetRecieved = RecievePacket(waitTime);
+
+	//Due to the nature of the callback used we cant tell it to put the data
+	//in different spots based on the caller, so we will copy from the data holder
+	//to the command one based on the type of packet were expecting.
+	if (packetRecieved) 
+	{
+		for (int index = 0; index < transmitDataIndex; index++) 
+		{
+			commandPacket[index] = dataPacket[index];
+		}
+
+		int recievedCommand = 0;
+
+		//Compare expected command to recieved command to make sure its what we are waiting for.
+		for (int index = 0; index < 4; index++)
+		{
+			recievedCommand = recievedCommand * 10 + (commandPacket[index] - 0x30);
+		}
+
+		if (recievedCommand == CommandList.SetOrigin)
+		{
+			originNodeIdentifier = (commandPacket[4] - 0x30);
+			return true;
+		}
+		else
+		{
+			return false;
+		}
+	}
+	else 
+	{
+		return false;
+	}
+
+}
+
+bool RecievePacket(unsigned long waitTime)
 {
 	DebugSerial.println(F("Calling Recieve Packet"));
 	// Wait up to 1 second for more data before writing out the line
 	uint32_t start = millis();
-	while (!XBeeSerial.available() && (millis() - start) < 1000);
-	if (!XBeeSerial.available()) {
+	while (!XBeeSerial.available() && (millis() - start) < waitTime);
+	if (!XBeeSerial.available()) 
+	{
 		DebugSerial.println(F("Nothing found. Exiting recievePacket."));
 		return false;
 	}
 
 	DebugSerial.println(F("Packet found!!"));
-	// Start of API packet, break to a new line
-	// In transparent mode, this causes every ~ to start a newline,
-	// but that's ok.
-	if (XBeeSerial.peek() != 0x7E)
-		return false;
 
-	// Read one byte and print it in hexadecimal. Store its value in
-	// data[], or store '.' is the byte is not printable. data[] will
-	// be printed later as an "ASCII" version of the data.
-	uint8_t preData = 0;
-	while (preData != 0xC1)
-	{
-		preData = XBeeSerial.read();
-		DebugSerial.print(preData, HEX);
-		start = millis();
-		while (!XBeeSerial.available() && (millis() - start) < 1000);
-	}
-
-	DebugSerial.println(F("Found start of data. Beginning to populate forwarding array."));
-	forwardingDataIndex = 0;
-	uint8_t b;
-	while (XBeeSerial.available())
-	{
-		if (forwardingDataIndex == 0)
-			b = XBeeSerial.read();
-
-		forwardingData[forwardingDataIndex++] = b;
-		b = XBeeSerial.read();
-		DebugSerial.println(b, HEX);
-	}
-	DebugSerial.println(F("Finished reading data."));
-	// Forward any data from the computer directly to the XBee module
-	if (DebugSerial.available())
-		XBeeSerial.write(DebugSerial.read());
+	//Wait a little while for the callback to catch up.
+	start = millis();
+	while ((millis() - start) < 100) {};
+	xbee.onZBRxResponse(ProcessRxPacket);
 	return true;
-}*/
+}
 
-//Functions required by Arduino.
+void ProcessRxPacket(ZBRxResponse& rx, uintptr_t) 
+{
+	DebugSerial.print(F("Received packet from "));
+	printHex(DebugSerial, rx.getRemoteAddress64());
+	DebugSerial.println();
+	DebugSerial.print(F("Payload: "));
+	
+	//Grab the data from the stream and place it into a global array
+	for (int ii = 0; ii < rx.getDataLength(); ii++)
+	{
+		dataPacket[ii] = rx.getData(ii);
+		DebugSerial.print(rx.getData(ii), HEX);
+		transmitDataIndex = ii;
+	}
+}
+
+//Main Functions=============================================================================
 
 void setup()
 {
+
+	//Network Initialization Period
+	unsigned long initializationStartTime = millis();
+	bool initializationComplete = false;
 
 	// Initiliaze the hardware and software serial.
 	DebugSerial.begin(115200);
@@ -593,21 +781,44 @@ void setup()
 	XBeeSerial.begin(9600);
 	xbee.setSerial(XBeeSerial);
 
+	bool gotLocalInformation = false;
+	bool configComplete = false;
+	bool discoveredNodes = false;
+	bool neighborsSelected = false;
+	bool originNodeResolved = false;
+
 	//Determine this nodes SerialHigh and SerialLow. This will be needed later to identify the NodeIdentifier
 	//during the discovery step.
-	GetLocalNodeInformation();
-	SetNetworkDiscoveryOptions();
+	do
+	{
+		gotLocalInformation = GetLocalNodeInformation();
+	} while (millis() - initializationStartTime < 25000 && !gotLocalInformation);
+	
+	do
+	{
+		configComplete = SetNetworkDiscoveryOptions();
+	} while (millis() - initializationStartTime < 25000 && !configComplete);
 
 	//Find all neighbors and then sort the nodes by NodeIdentifier. This will make it easier
 	//to handle failures as we can simply increment through the array to find potential next
 	//hops.
-	FindNodes();
-	SortNodeArray();
-	PrintNodeArray();
+	//
+	//The reason we enter here on either failure is becuase if we found nodes but none were 
+	//considered suitable nieghbors than we need to try to scan the network again in the hopes
+	//of finding a node that is closer to the hub than we are.
+	do
+	{
+		discoveredNodes = FindNodes();
+		SortNodeArray();
 
-	//Need to determine how many of the neighbors we want to send to. The default range will be within 3
-	//hops of the current node, within the direction of the hub.
-	SelectNeighbors();
+		//Need to determine how many of the neighbors we want to send to. The default range will be within 3
+		//hops of the current node, within the direction of the hub.
+		neighborsSelected = SelectNeighbors();
+
+	} while (millis() - initializationStartTime < 25000 && !discoveredNodes || !neighborsSelected);
+	
+	//Print all found nodes.
+	PrintNodeArray();
 
 	//Finally print our Local Information.
 	DebugSerial.println(F("Local Node Information."));
@@ -619,18 +830,83 @@ void setup()
 	DebugSerial.println(LocalNode.nodeIdentifier, DEC);
 	DebugSerial.println("");
 
+	do
+	{	
+		//Check to see if this is the origin node.
+		IsOrigin();
+
+		if (isOrigin)
+		{
+			originNodeResolved = AnnounceOrigin();
+		}
+		else
+		{
+			originNodeResolved = WaitForCommandPacket(4000); //Wait for four seconds.
+		}
+
+		if (originNodeResolved)
+		{
+			initializationComplete = true;
+		}
+	} while (millis() - initializationStartTime < 25000 && !originNodeResolved);
+
+	//This is a catch for if we failed to intialize properly in the alloted time.
+	while (!initializationComplete)
+	{
+		delay(1000);
+		DebugSerial.println(F("Initialization failed. Please restart device."));
+	}
+
+	DebugSerial.println(F("All initialization steps complete. Waiting to start."));
+
+	//This is an extra layer, that is meant to prevent the need for interrupts in the previous loop.
+	do {} while (millis() - initializationStartTime < 30000);
+
+	DebugSerial.println(F("Network loop starting now..."));
+
 }
 
 void loop() 
 {
+	DebugSerial.println(F("Starting Cycle."));
 
-	// Check the serial port to see if there is a new packet available
 	xbee.loop();
+	bool packetRecieved = false;
+	bool packetTransmitted = false;
+	int count = 0;
+	
+	//Store the intial start time. The cycle will last as # seconds
+	//where # is the origin NI.
+	cycleStartTime = millis();
+	cycleDuration = originNodeIdentifier * 1000;
+	
+	//May put sleep timer here later. For now no sleeping, just waiting.
 
-	// Send a packet every 10 seconds
-	if (millis() - last_tx_time > 10000) {
-	  last_tx_time = millis();
-	  SendPacket();
+	if (!isOrigin) 
+	{
+		do
+		{
+			packetRecieved = WaitForDataPacket(cycleDuration - 10 * LocalNode.nodeIdentifier);
+			if (packetRecieved)
+			{
+				AppendSensorData();
+				packetTransmitted = TransmitData();
+			}
+			if (packetTransmitted)
+				break;
+		} while (millis() - cycleDuration < cycleStartTime && !packetTransmitted && !packetRecieved);
 	}
-
+	else 
+	{
+		do
+		{
+			AppendSensorData();
+			packetTransmitted = TransmitData();
+			if (packetTransmitted)
+				break;
+		} while (millis() - cycleDuration < cycleStartTime && !packetTransmitted);
+	}
+	
+	//Wait for any remaining time to expire.
+	while (millis() - cycleDuration < cycleStartTime) {};
 }

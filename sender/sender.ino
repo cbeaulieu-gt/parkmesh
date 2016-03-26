@@ -269,6 +269,7 @@ bool GetLocalNodeInformation()
 
 bool SetNetworkDiscoveryOptions() 
 {
+
 	AtCommandRequest atCommandRequest = AtCommandRequest(NO);
 	AtCommandResponse atCommandResponse = AtCommandResponse();
 
@@ -331,8 +332,6 @@ bool SetNetworkDiscoveryOptions()
 //Prints the array of nodes found in the FindNeighbor(FN) command.
 void PrintNodeArray() 
 {
-	DebugSerial.println(F("Node Response List."));
-
 	for (Node node : AllNodes)
 	{
 		//Since the whole array is pre-allocated we only want to display

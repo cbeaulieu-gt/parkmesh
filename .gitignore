@@ -9,6 +9,11 @@
 
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
+*.sln
+*.xml
+*.vcxproj
+*.vcxproj.filters
+*.vsarduino.h
 
 # Build results
 [Dd]ebug/

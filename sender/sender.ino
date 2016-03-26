@@ -1,7 +1,6 @@
 #include <XBee.h>
 #include <Printers.h>
 #include <AltSoftSerial.h>
-#include <Node.h>
 
 // DONT CHANGE THESE DECLARATIONS++++++++++++++++++
 
@@ -15,6 +14,15 @@ XBeeWithCallbacks xbee;
 
 //+++++++++++++++++++++++++++++++++++++++++++++++++
 
+
+//Node Class
+
+class Node{
+  public:
+    uint32_t serialNumberHigh;
+    uint32_t serialNumberLow;
+    uint8_t nodeIdentifier;
+};
 
 //List of AT Commands+++++++++++++++++++++++++
 

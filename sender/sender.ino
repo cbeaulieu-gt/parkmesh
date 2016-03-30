@@ -732,7 +732,7 @@ bool SelectNeighbors()
 }
 
 //Retrieve data from the sensor device.
-int GetSensorData() 
+uint8_t GetSensorData() 
 {
 	//For now this function will simply get a random piece of data. Either a zero or a one.
 	uint8_t randomSignal = random(2);
@@ -747,9 +747,9 @@ int GetSensorData()
 //down the chain.
 void AppendSensorData() 
 {
-	int sensorData = GetSensorData();
+	uint8_t sensorData = GetSensorData();
 
-	uint8_t payload = LocalNode.nodeIdentifier << 1 || sensorData;
+	uint8_t payload = LocalNode.nodeIdentifier << 1 | sensorData;
 	DebugSerial.print(F("Local Payload : "));
 	DebugSerial.println(payload, HEX);
 

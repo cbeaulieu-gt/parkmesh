@@ -14,7 +14,6 @@ XBeeWithCallbacks xbee;
 
 //+++++++++++++++++++++++++++++++++++++++++++++++++
 
-
 //Node Class
 
 class Node{
@@ -46,7 +45,7 @@ const int MAX_NODES = 10;
 Node AllNodes[MAX_NODES];
 Node DestinationNodes[3];
 unsigned long cycleDuration = 5000;
-unsigned long waitTime = 1000;
+unsigned long waitTime = 30000;
 unsigned long deviceInitializationTime = 30000;
 uint8_t dataPacket[MAX_NODES];
 
@@ -69,6 +68,9 @@ int cycleMissCount = 0;
 bool originNode = false;
 bool backupOriginNode = false;
 int originMissCount = 0;
+
+//For the hub only
+bool isHub = false;
 
 //=================================================================================================
 //=================================================================================================
@@ -105,6 +107,38 @@ bool IsOriginNode()
 	}
 
 	return true;
+}
+
+bool IsHubNode()
+{
+	DebugSerial.println(F("Checking to see if this is the hub node."));
+
+	uint8_t currentMinimum = -1;
+	for (int index = 0; index < MAX_NODES; index++) 
+	{
+		if (AllNodes[index].nodeIdentifier < currentMinimum)
+		{
+			currentMinimum = AllNodes[index].nodeIdentifier;
+		}
+	}
+	SendNodeIdentifiers();
+	if (currentMinimum == LocalNode.nodeIdentifier) 
+	{
+		isHub = true;
+		SendNodeIdentifiers();
+	}
+	
+	return true;
+}
+
+//Forward all node identifiers to the Raspberry PI
+void SendNodeIdentifiers() 
+{
+	DebugSerial.println("");
+	DebugSerial.println("Sending Node Identifiers:");
+	for (int i = 0; i < sizeof(AllNodes)/sizeof(AllNodes[0]); i++) {
+		Serial.println(AllNodes[i].nodeIdentifier);
+	}
 }
 
 //Sends a  message to a node in the network informing it that it is the new
@@ -700,27 +734,26 @@ bool SelectNeighbors()
 	//Note that the array has been pre-sorted (biggest to smallest) so we can take the
 	//first 3 entries we encounter that satisfy the conditions without worrying about 
 	//grabbing nodes too far down the list.
-	int nodesSelected = 0;
 	for (int index = 0; index < MAX_NODES; index++) 
 	{
-		if (AllNodes[index].nodeIdentifier < LocalNode.nodeIdentifier && nodesSelected < 3 && AllNodes[index].nodeIdentifier != 0) 
+		if (AllNodes[index].nodeIdentifier < LocalNode.nodeIdentifier && neighbors < 3 && AllNodes[index].nodeIdentifier != 0) 
 		{
-			DestinationNodes[nodesSelected] = AllNodes[index];
+			DestinationNodes[neighbors] = AllNodes[index];
 			DebugSerial.println(F("Neighbor selected."));
 			DebugSerial.print(F("SH: "));
-			DebugSerial.print(DestinationNodes[nodesSelected].serialNumberHigh, HEX);
+			DebugSerial.print(DestinationNodes[neighbors].serialNumberHigh, HEX);
 			DebugSerial.print(F(";  SL: "));
-			DebugSerial.print(DestinationNodes[nodesSelected].serialNumberLow, HEX);
+			DebugSerial.print(DestinationNodes[neighbors].serialNumberLow, HEX);
 			DebugSerial.print(F(";  NI: "));
-			DebugSerial.println(DestinationNodes[nodesSelected].nodeIdentifier, DEC);
+			DebugSerial.println(DestinationNodes[neighbors].nodeIdentifier, DEC);
 
-			nodesSelected++;
+			neighbors++;
 		}
 	}
 
 	//For now this is advisory but in a real network this should cause the node to either shut down
 	//or re-initiate a Network Discovery at a later period.
-	if (nodesSelected == 0) 
+	if (neighbors == 0)
 	{
 		DebugSerial.println(F("No suitable neighbors found."));
 		return false;
@@ -769,7 +802,7 @@ bool TransmitData()
 
 	//Grab the data from the stream and place it into a global array
 	DebugSerial.print(F("Data in data array before storage:"));
-	for (int ii = 0; ii < sizeof(dataPacket); ii++)
+	for (int ii = 0; ii < sizeof(dataPacket)/sizeof(uint8_t); ii++)
 	{
 		DebugSerial.print(dataPacket[ii], HEX);
 	}
@@ -785,7 +818,7 @@ bool TransmitData()
 
 	//Grab the data from the stream and place it into a global array
 	DebugSerial.print(F("Data in temporary array:"));
-	for (int ii = 0; ii < sizeof(temp); ii++)
+	for (int ii = 0; ii < sizeof(temp)/ sizeof(uint8_t); ii++)
 	{
 		DebugSerial.print(temp[ii], HEX);
 	}
@@ -794,9 +827,9 @@ bool TransmitData()
 	//This loop will attempt to send the data to the next node, whose information is located in
 	//the array of selected neighbors. It will keep attempting to do so until it either succeeds in 
 	//transmitting to one, or it reaches the end of the list of potential recipients.
-	while (packetSent == false && index < sizeof(DestinationNodes))
+	while (packetSent == false && index < neighbors)
 	{
-		packetSent = SendPacket(DestinationNodes[index], temp, sizeof(temp));
+		packetSent = SendPacket(DestinationNodes[index], temp, sizeof(temp)/ sizeof(uint8_t));
 		index++;
 	}
 
@@ -965,6 +998,12 @@ bool ProcessCommandPacket()
 	}
 }
 
+void HubLoop() 
+{
+	bool packetRecieved = false;
+	packetRecieved = WaitForPacket(waitTime);
+}
+
 bool DeviceInitialization() 
 {
 	//Initialization Period
@@ -999,6 +1038,7 @@ bool DeviceInitialization()
 		
 		//Check to see if this is the origin node.
 		originNodeResolved = IsOriginNode();
+		IsHubNode();
 
 	} while (millis() - initializationStartTime < deviceInitializationTime && !discoveredNodes || !originNodeResolved);
 
@@ -1102,6 +1142,10 @@ void loop()
 			packetTransmitted = TransmitData();
 		} while (!packetTransmitted);
 		do {} while (millis() - cycleDuration < cycleStartTime);
+	}
+	else if (IsHubNode) 
+	{
+		HubLoop();
 	}
 	else 
 	{

@@ -749,7 +749,7 @@ void AppendSensorData()
 {
 	int sensorData = GetSensorData();
 
-	uint8_t payload = LocalNode.nodeIdentifier >> 1 || sensorData;
+	uint8_t payload = LocalNode.nodeIdentifier << 1 || sensorData;
 	DebugSerial.print(F("Local Payload : "));
 	DebugSerial.println(payload, HEX);
 
@@ -924,7 +924,7 @@ bool ProcessPacket()
 {
 	//Check to the topmost bit of the packet. If it is set to one
 	//this is a command packet that needs to be processed.
-	if (dataPacket[0] == 0x8) 
+	if (dataPacket[0] == 0x80) 
 	{
 		DebugSerial.println("Command Packet recieved. Processing command now.");
 		return ProcessCommandPacket();

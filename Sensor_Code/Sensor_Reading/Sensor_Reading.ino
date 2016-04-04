@@ -24,13 +24,15 @@ void setup() {
   // initialize serial communications at 9600 bps:
   Serial.begin(9600);
   pinMode(13, OUTPUT); //LED
+  pinMode(12, OUTPUT);
+  digitalWrite(12, HIGH);
 }
 
 void loop() {
   // read the analog in value:
   sensorValue = analogRead(analogInPin);
   // convert the int value to floating point arithmetic.
-  voltage = sensorValue * (5.0 / 1023.0);
+  voltage = sensorValue * (3.3 / 1023.0);
   // convert the analog input voltage to the distance based on the datasheet of GP2Y0A41SK IR sensor.
   distance = 12.9615 / voltage - 0.42;
   // Do a car detection based on simple thresholding and output the result to the LED.
@@ -51,6 +53,10 @@ void loop() {
   {
     Serial.println("Car is Detected!!!");
   }
+
+  uint8_t randomSignal = random(2);
+  Serial.print(F("Generated Signal: "));
+  Serial.println(randomSignal);
   
 
   // wait 1 seconds before the next loop

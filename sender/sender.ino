@@ -54,6 +54,14 @@ uint8_t dataPacket[MAX_NODES];
 //Specfic only to this node. Operation specfic variables should be
 //placed here.
 
+///// Sensor Integration Code /////
+//const int analogInPin = A0;  // Analog input pin that the IR sensor is attached to
+//int sensorValue = 0;        // value read from the IR sensor
+//float voltage = 0.0;        // IR sensor value in floating point arithmetic
+//float distance = 0.0;       // Distance of the object detected to the IR sensor.
+//boolean isCarParked = false;  //TRUE if a car is detected and FALSE if a car is not detected.
+///// Sensor Integration Code End /////
+
 Node LocalNode;
 int transmitDataIndex = 0;
 int neighbors = 0;
@@ -779,6 +787,34 @@ uint8_t GetSensorData()
 	DebugSerial.print(F("Generated Signal: "));
 	DebugSerial.println(randomSignal);
 
+  ///// Sensor Integration Code /////
+  //digitalWrite(12, HIGH);
+  //uint8_t carParked = 0;
+  //delay(100); // wait for sensor output to stabilize.
+  //// read the analog in value:
+  //sensorValue = analogRead(analogInPin);
+  //// convert the int value to floating point arithmetic.
+  //voltage = sensorValue * (3.3 / 1023.0);
+  //// convert the analog input voltage to the distance based on the datasheet of GP2Y0A41SK IR sensor.
+  //distance = 12.9615 / voltage - 0.42;
+  // Do a car detection based on simple thresholding and output the result to the LED.
+  //if (distance < 8.0)
+  //{
+  //  isCarParked = true;
+  //  digitalWrite(13, HIGH);
+  //  carParked = 1;
+  //}
+  //else
+  //{
+  //  isCarParked = false;
+  //  digitalWrite(13, LOW);
+  //  carParked = 0;
+  //}
+  //digitalWrite(12, LOW);
+  //return carParked;
+  ///// Sensor Integration Code End /////
+  
+
 	return randomSignal;
 }
 
@@ -1113,6 +1149,7 @@ void setup()
 	XBeeSerial.begin(9600);
 	xbee.setSerial(XBeeSerial);
 
+
 	//Main Setup Function. Will run until setup is completed, or until 5 tries has been completed.
 	//If it fails after 5 tries the device will not be to work and will attempt to broadcast a message
 	//to the hub informing of the failure.
@@ -1129,6 +1166,12 @@ void setup()
 	{
 		//Broadcast failure or simply wait for a command packet.
 	}
+
+  ///// Sensor Integration Code /////
+  //pinMode(13, OUTPUT); //LED
+  //pinMode(12, OUTPUT);
+  //digitalWrite(12, LOW);
+  ///// Sensor Integration Code End /////
 
 	DebugSerial.println(F("Network loop starting now..."));
 

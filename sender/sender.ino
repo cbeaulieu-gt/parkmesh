@@ -46,7 +46,7 @@ Node AllNodes[MAX_NODES];
 Node DestinationNodes[3];
 unsigned long cycleDuration = 5000;
 unsigned long waitTime = 10000;
-unsigned long deviceInitializationTime = 30000;
+unsigned long deviceInitializationTime = 10000;
 uint8_t dataPacket[MAX_NODES];
 
 //Local Node+++++++++++++++++++++++++++++++++++++++
@@ -57,6 +57,7 @@ uint8_t dataPacket[MAX_NODES];
 Node LocalNode;
 int transmitDataIndex = 0;
 int neighbors = 0;
+int totalNodes = 0;
 unsigned long cycleStartTime = 0;
 bool deviceSetupComplete = false;
 bool packetProcessed = false;
@@ -114,7 +115,7 @@ bool IsHubNode()
 	DebugSerial.println(F("Checking to see if this is the hub node."));
 
 	uint8_t currentMinimum = -1;
-	for (int index = 0; index < MAX_NODES; index++) 
+	for (int index = 0; index < totalNodes; index++) 
 	{
     DebugSerial.println(AllNodes[index].nodeIdentifier);
 		if (AllNodes[index].nodeIdentifier < currentMinimum)
@@ -706,6 +707,7 @@ bool NetworkDiscovery()
 					AllNodes[index].nodeIdentifier = nodeIdentifier;
 					DebugSerial.print(F("NI: "));
 					DebugSerial.println(nodeIdentifier);
+          totalNodes++;
 
 					//This is in here since we dont count a response from ourself, we only care 
 					//about external nodes.
@@ -1150,7 +1152,7 @@ void loop()
 		} while (!packetTransmitted);
 		do {} while (millis() - cycleDuration < cycleStartTime);
 	}
-	else if (IsHubNode) 
+	else if (isHub) 
 	{
 		HubLoop();
 	}

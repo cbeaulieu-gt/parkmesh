@@ -116,15 +116,19 @@ bool IsHubNode()
 	uint8_t currentMinimum = -1;
 	for (int index = 0; index < MAX_NODES; index++) 
 	{
+    DebugSerial.println(AllNodes[index].nodeIdentifier);
 		if (AllNodes[index].nodeIdentifier < currentMinimum)
 		{
 			currentMinimum = AllNodes[index].nodeIdentifier;
+      DebugSerial.println("Within if statement current minimum: ");
+      DebugSerial.println(currentMinimum);
 		}
 	}
 	SendNodeIdentifiers();
 	if (currentMinimum == LocalNode.nodeIdentifier) 
 	{
 		isHub = true;
+    DebugSerial.println("Setting the Hub");
 		SendNodeIdentifiers();
 	}
 	

@@ -45,7 +45,7 @@ const int MAX_NODES = 10;
 Node AllNodes[MAX_NODES];
 Node DestinationNodes[3];
 unsigned long cycleDuration = 5000;
-unsigned long waitTime = 30000;
+unsigned long waitTime = 10000;
 unsigned long deviceInitializationTime = 30000;
 uint8_t dataPacket[MAX_NODES];
 
@@ -136,7 +136,8 @@ void SendNodeIdentifiers()
 {
 	DebugSerial.println("");
 	DebugSerial.println("Sending Node Identifiers:");
-	for (int i = 0; i < sizeof(AllNodes)/sizeof(AllNodes[0]); i++) {
+	for (int i = 0; i < sizeof(AllNodes)/sizeof(AllNodes[0]); i++)
+	{
 		Serial.println(AllNodes[i].nodeIdentifier);
 	}
 }
@@ -835,6 +836,7 @@ bool TransmitData()
 
 	//Finally clear the array of data.
 	ClearDataArray();
+  return packetSent;
 }
 
 //Attempts to send a single packet. Can do either targeted or broadcast transmissions.
@@ -1000,6 +1002,7 @@ bool ProcessCommandPacket()
 
 void HubLoop() 
 {
+	DebugSerial.println("Hub Node: Waiting for data");
 	bool packetRecieved = false;
 	packetRecieved = WaitForPacket(waitTime);
 }
@@ -1151,9 +1154,11 @@ void loop()
 	{
 		if (backupOriginNode) 
 		{
+			DebugSerial.println("Backup Origin: Waiting for data");
 			packetRecieved = WaitForPacket(waitTime);
 			if (packetRecieved && !packetTransmitted)
 			{
+				DebugSerial.println("Data recieved and processed. Preparing to send.");
 				originMissCount = 0;
 				AppendSensorData();
 				packetTransmitted = TransmitData();
@@ -1174,6 +1179,7 @@ void loop()
 		}
 		else 
 		{
+			DebugSerial.println("Node: Waiting for data");
 			packetRecieved = WaitForPacket(waitTime);
 			if (packetRecieved && !packetTransmitted)
 			{

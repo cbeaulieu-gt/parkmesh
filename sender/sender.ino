@@ -46,7 +46,7 @@ Node AllNodes[MAX_NODES];
 Node DestinationNodes[3];
 unsigned long cycleDuration = 5000;
 unsigned long waitTime = 10000;
-unsigned long deviceInitializationTime = 5000;
+unsigned long deviceInitializationTime = 30000;
 uint8_t dataPacket[MAX_NODES];
 
 //Local Node+++++++++++++++++++++++++++++++++++++++
@@ -833,7 +833,7 @@ void AppendSensorData()
   //There is no need to check for size as the array is predefined
   //to be able to hold an entry for every node in the network and no node will ever be
   //able to speak with all other nodes.
-  
+
   dataPacket[transmitDataIndex] = payload;
   transmitDataIndex++;
 }
@@ -861,15 +861,15 @@ bool TransmitData()
   //Because of the way we are passing variables we need a temporary array to store the data we are
   //sending
   uint8_t temp[transmitDataIndex];
-  for (int index = 0; index < tansmitDataIndex; index++)
+  for (int index = 0; index < transmitDataIndex; index++)
   {
     temp[index] = dataPacket[index];
   }
 
   //Grab the data from the stream and place it into a global array
-
+  DebugSerial.print(sizeof(temp));
   DebugSerial.print(F("Data in temporary array:"));
-  
+
   for (int ii = 0; ii < sizeof(temp) / sizeof(uint8_t); ii++)
   {
     sprintf(chTemp, "%02X,", temp[ii]);
@@ -988,18 +988,32 @@ bool RecievePacket(unsigned long waitTime)
 
   DebugSerial.println(F("Found start of data. Beginning to populate forwarding array."));
   transmitDataIndex = 0;
-  uint8_t byte;
+  uint8_t byteVar;
+  int counter = 0;
   while (XBeeSerial.available())
   {
     //This is to prevent the capture of the checksum.
     if (transmitDataIndex == 0)
-      byte = XBeeSerial.read();
-
-    DebugSerial.print(byte, HEX);
-    dataPacket[transmitDataIndex++] = byte;
-    byte = XBeeSerial.read();
+    {
+      byteVar = XBeeSerial.read();
+      start = millis();
+      while (!XBeeSerial.available() && (millis() - start) < 1000) /* nothing */;
+    }
+    sprintf(chTemp, "%02X,", byteVar);
+    DebugSerial.print(chTemp);
+    DebugSerial.println(transmitDataIndex);
+    dataPacket[transmitDataIndex++] = byteVar;
+    byteVar = XBeeSerial.read();
+    start = millis();
+    while (!XBeeSerial.available() && (millis() - start) < 1000) /* nothing */;
+    sprintf(chTemp, "%02X,", byteVar);
+    DebugSerial.print(chTemp);
+    counter++;
   }
-  DebugSerial.println(F("Finished reading data."));
+  DebugSerial.println(counter);
+  DebugSerial.println(transmitDataIndex);
+
+  DebugSerial.println(F("\nFinished reading data."));
   // Forward any data from the computer directly to the XBee module
   if (DebugSerial.available())
     XBeeSerial.write(DebugSerial.read());
@@ -1184,7 +1198,7 @@ void setup()
   //pinMode(12, OUTPUT);
   //digitalWrite(12, LOW);
   ///// Sensor Integration Code End /////
-    DebugSerial.println(F("Network loop starting now..."));
+  DebugSerial.println(F("Network loop starting now..."));
 
 }
 

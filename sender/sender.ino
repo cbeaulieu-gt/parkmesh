@@ -1132,7 +1132,7 @@ bool DeviceInitialization()
     if (neighborsSelected)
       initializationComplete = true;
 
-  } while (millis() - initializationStartTime < deviceInitializationTime && !discoveredNodes && !neighborsSelected);
+  } while (millis() - initializationStartTime < deviceInitializationTime && !neighborsSelected);
 
   //Print all found nodes.
   PrintNodeArray();

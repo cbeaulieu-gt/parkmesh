@@ -33,19 +33,22 @@ void loop() {
   sensorValue = analogRead(analogInPin);
   // convert the int value to floating point arithmetic.
   voltage = sensorValue * (3.3 / 1023.0);
-  // convert the analog input voltage to the distance based on the datasheet of GP2Y0A41SK IR sensor.
-  distance = 12.9615 / voltage - 0.42;
-  // Do a car detection based on simple thresholding and output the result to the LED.
-  if (distance < 8.0)
-  {
-    isCarParked = true;
+  // convert the analog input voltage to the distance based on the measurements for 3.3V and GPIO pin conditions.
+  if (voltage < 2.2 || voltage > 0.75) { //This is the valid measurement range for the sensor.
+    distance = 7.4845 / (voltage - 0.3336);
+    if (distance < 10) {
+      isCarParked = true;
+      digitalWrite(13, HIGH);
+    } else {
+      isCarParked = false;
+      digitalWrite(13, LOW);
+    }
+  } else { //Usually if voltage is outside of this range, then it means there is an object within 0-4cm to the distance.
+    distance = 100; //invalid distance
     digitalWrite(13, HIGH);
+    isCarParked = true;
   }
-  else
-  {
-    isCarParked = false;
-    digitalWrite(13, LOW);
-  }
+
   // print the results to the serial monitor:
   Serial.print("IR Sensor Reading in cm = ");
   Serial.println(distance);
@@ -53,10 +56,11 @@ void loop() {
   {
     Serial.println("Car is Detected!!!");
   }
-
+  /*
   uint8_t randomSignal = random(2);
   Serial.print(F("Generated Signal: "));
   Serial.println(randomSignal);
+  */
   
 
   // wait 1 seconds before the next loop

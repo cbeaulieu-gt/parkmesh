@@ -1,7 +1,7 @@
 #include <XBee.h>
 #include <Printers.h>
 #include <AltSoftSerial.h>
-
+#include <avr/sleep.h>
 // DONT CHANGE THESE DECLARATIONS++++++++++++++++++
 
 AltSoftSerial SoftSerial;
@@ -250,7 +250,7 @@ bool GetLocalNodeInformation()
     }
     else
     {
-      DebugSerial.println(F("The response was not succesful."));
+      DebugSerial.println(F("The response was not succesful while getting local serial high."));
     }
   }
 
@@ -312,7 +312,7 @@ bool GetLocalNodeInformation()
     }
     else
     {
-      DebugSerial.println(F("The response was not succesful."));
+      DebugSerial.println(F("The response was not succesful while getting local serial low."));
     }
   }
 
@@ -374,7 +374,7 @@ bool SendATCommand(uint8_t command[], uint8_t commandValue)
     }
     else
     {
-      DebugSerial.println(F("The response was not succesful."));
+      DebugSerial.println(F("The response was not succesful while setting Network Discovery options."));
     }
   }
 
@@ -582,7 +582,7 @@ bool FindNodes()
     }
     else
     {
-      DebugSerial.println(F("The response was not successful."));
+      DebugSerial.println(F("The response was not successful while doing Find Neighbors."));
     }
   }
 
@@ -729,7 +729,7 @@ bool NetworkDiscovery()
     }
     else
     {
-      DebugSerial.println(F("The response was not successful."));
+      DebugSerial.println(F("The response was not successful while doing Network Discovery."));
     }
   }
 
@@ -1187,7 +1187,7 @@ bool DeviceInitialization()
     neighborsSelected = SelectNeighbors();
 
     //Last initialization comdition complete
-    if (neighborsSelected)
+    if (neighborsSelected || isHub)
       initializationComplete = true;
 
   } while (millis() - initializationStartTime < deviceInitializationTime && !neighborsSelected);
@@ -1215,15 +1215,22 @@ bool DeviceInitialization()
 	pinMode(XBEE_SLEEPRQ_PIN, OUTPUT);
 	digitalWrite(XBEE_SLEEPRQ_PIN, HIGH);
   }
-  DebugSerial.print(F("At initialization complete transmitDataIndex: "));
-  DebugSerial.println(transmitDataIndex);
+  //DebugSerial.print(F("At initialization complete transmitDataIndex: "));
+  //DebugSerial.println(transmitDataIndex);
   DebugSerial.println(F("All initialization steps complete. Waiting to start."));
 
   //This is an extra layer, that is meant to prevent the need for interrupts in the previous loop.
   do {} while (millis() - initializationStartTime < (deviceInitializationTime + 5000));
   return true;
 }
-
+void wakeUpNow()        // here the interrupt is handled after wakeup
+{
+  // execute code here after wake-up before returning to the loop() function
+  // timers and code using timers (serial.print and more...) will not work here.
+  // we don't really need to execute any special functions here, since we
+  // just want the thing to wake up
+  Serial.println("I woke up");
+}
 //Main Functions=============================================================================
 
 
@@ -1281,9 +1288,9 @@ void loop()
     do {} while (millis() - cycleDuration < cycleStartTime);
   }
   else if (isHub)
-  {
-    HubLoop();
-  }
+    {
+     HubLoop();
+    }
   else
   {
     if (backupOriginNode)
@@ -1318,7 +1325,25 @@ void loop()
       if (packetRecieved && !packetTransmitted)
       {
         AppendSensorData();
-        packetTransmitted = TransmitData();
+        packetTransmitted = TransmitData(); 
+        /*sleep_enable();
+
+        set_sleep_mode(SLEEP_MODE_PWR_DOWN);   // sleep mode is set here
+
+        sleep_enable();          // enables the sleep bit in the mcucr register
+        // so sleep is possible. just a safety pin
+
+
+
+        attachInterrupt(digitalPinToInterrupt(2), wakeUpNow, CHANGE);// wakeUpNow when pin 2 gets LOW
+        Serial.println("Help!!! They are putting me to sleep");
+        sleep_mode();            // here the device is actually put to sleep!!
+        // THE PROGRAM CONTINUES FROM HERE AFTER WAKING UP
+
+        sleep_disable();         // first thing after waking from sleep:
+        // disable sleep...
+        detachInterrupt(digitalPinToInterrupt(2));*/
+
       }
       else
       {

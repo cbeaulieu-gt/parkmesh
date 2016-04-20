@@ -30,6 +30,7 @@ uint8_t ND[] = { 'N', 'D' }; //Network Discovery
 uint8_t NO[] = { 'N', 'O' }; //Network Discovery Options
 uint8_t SH[] = { 'S', 'H' }; //Serial High
 uint8_t SL[] = { 'S', 'L' }; //Serial Low
+uint8_t SM[] = { 'S', 'M' }; //Serial Low
 
 //List of Internal Commands
 uint8_t setBackupOrigin = 0x80;
@@ -44,7 +45,7 @@ uint8_t reinitializeNetwork = 0x90;
 const int MAX_NODES = 10;
 Node AllNodes[MAX_NODES];
 Node DestinationNodes[3];
-unsigned long cycleDuration = 5000;
+unsigned long cycleDuration = 10000;
 unsigned long waitTime = 10000;
 unsigned long deviceInitializationTime = 30000;
 uint8_t dataPacket[MAX_NODES];
@@ -78,8 +79,12 @@ bool originNode = false;
 bool backupOriginNode = false;
 int originMissCount = 0;
 char chTemp[3];
+
 //For the hub only
 bool isHub = false;
+
+//Neede to sleep Xbee on the case of node failure.
+const uint8_t XBEE_SLEEPRQ_PIN = 7;
 
 //=================================================================================================
 //=================================================================================================
@@ -129,8 +134,7 @@ bool IsHubNode()
     if (AllNodes[index].nodeIdentifier < currentMinimum)
     {
       currentMinimum = AllNodes[index].nodeIdentifier;
-      //DebugSerial.println("Within if statement current minimum: ");
-      //DebugSerial.println(currentMinimum);
+
     }
   }
   SendNodeIdentifiers();
@@ -323,21 +327,13 @@ bool GetLocalNodeInformation()
   }
 }
 
-bool SetNetworkDiscoveryOptions()
+bool SendATCommand(uint8_t command[], uint8_t commandValue)
 {
-
-  AtCommandRequest atCommandRequest = AtCommandRequest(NO);
+  AtCommandRequest atCommandRequest = AtCommandRequest(command);
   AtCommandResponse atCommandResponse = AtCommandResponse();
-
-  //This will make the XBee respond to the Network Discovery command so we can determine the
-  //identifier.
-  uint8_t data = 0x02;
-  atCommandRequest.setCommandValue(&data);
-  atCommandRequest.setCommandValueLength(sizeof(data));
-
-  //Send Network Discovery Options Command
+  atCommandRequest.setCommandValue(&commandValue);
+  atCommandRequest.setCommandValueLength(sizeof(uint8_t));
   xbee.send(atCommandRequest);
-  DebugSerial.println(F("NetworkDiscoveryOptions(NO) command sent to Xbee."));
 
   while (xbee.readPacket(500))
   {
@@ -1069,15 +1065,53 @@ bool ProcessCommandPacket()
   }
 }
 
+String StringFormatter(String s)
+{
+	int sLength = s.length();
+	int bitsToAdd = 8 - sLength;
+
+	String temp = "";
+	for (int i = 0; i < bitsToAdd; i++) {
+		temp = temp + "0";
+	}
+	return temp + s;
+}
+
+String Concatenate(uint8_t array[]) {
+	String builder = "";
+	
+	for (int i = 0; i < MAX_NODES; i++)
+	{
+		if (array[i] != 0)
+		{
+			builder = builder + StringFormatter(String(array[i], BIN));
+		}
+	}
+	return builder;
+}
+
 void HubLoop()
 {
   DebugSerial.println("Hub Node: Waiting for data");
   bool packetRecieved = false;
   packetRecieved = WaitForPacket(waitTime);
+  String stringToSend;
+  
+  //Send a flag to PI.
+  DebugSerial.println("qwerty");
+
+  if (packetRecieved)
+  {
+	  stringToSend = Concatenate(dataPacket);
+  }
+
+  DebugSerial.println(stringToSend);
+  ClearDataArray();
 }
 
 bool DeviceInitialization()
 {
+
   //Initialization Period
   unsigned long initializationStartTime = millis();
   bool initializationComplete = false;
@@ -1087,6 +1121,8 @@ bool DeviceInitialization()
   bool discoveredNodes = false;
   bool neighborsSelected = false;
   bool originNodeResolved = false;
+  bool sleepModeEnabled = false;
+  bool networkDiscoveryOptionsSet = false;
 
   //Determine this nodes SerialHigh and SerialLow. This will be needed later to identify the NodeIdentifier
   //during the discovery step.
@@ -1097,7 +1133,27 @@ bool DeviceInitialization()
 
   do
   {
-    deviceConfigurationComplete = SetNetworkDiscoveryOptions();
+
+	  if (!networkDiscoveryOptionsSet) 
+	  {
+		  //This will make the XBee respond to the Network Discovery command so we can determine the
+		  //identifier.
+		  uint8_t data = 0x02;
+		  DebugSerial.println(F("NetworkDiscoveryOptions(NO) command sent to Xbee."));
+		  networkDiscoveryOptionsSet = SendATCommand(NO, data);
+	  }
+
+	  //if (!sleepModeEnabled) 
+	  //{
+		//  uint8_t data = 0x01;
+		 // DebugSerial.println(F("SleepMode(SM) command sent to Xbee."));
+		 // sleepModeEnabled = SendATCommand(SM, data);
+	 // }
+
+
+	  if (networkDiscoveryOptionsSet)
+		  deviceConfigurationComplete = true;
+
   } while (millis() - initializationStartTime < deviceInitializationTime && !deviceConfigurationComplete);
 
   //Finds all nodes within the network. Then we can determine whether or not the node is
@@ -1149,12 +1205,15 @@ bool DeviceInitialization()
   DebugSerial.println(LocalNode.nodeIdentifier, DEC);
   DebugSerial.println("");
 
-
   //This is a catch for if we failed to intialize properly in the alotted time.
   while (!initializationComplete)
   {
     delay(1000);
-    DebugSerial.println(F("Initialization failed. Please restart device."));
+    DebugSerial.println(F("Initialization failed. Shutting down XBee."));
+
+	//Setting pin high to sleep XBee.
+	pinMode(XBEE_SLEEPRQ_PIN, OUTPUT);
+	digitalWrite(XBEE_SLEEPRQ_PIN, HIGH);
   }
   DebugSerial.print(F("At initialization complete transmitDataIndex: "));
   DebugSerial.println(transmitDataIndex);
@@ -1171,12 +1230,16 @@ bool DeviceInitialization()
 void setup()
 {
 
+
   // Initiliaze the hardware and software serial.
   DebugSerial.begin(115200);
   randomSeed(analogRead(0));
   XBeeSerial.begin(9600);
   xbee.setSerial(XBeeSerial);
 
+  //Wake up command in case it was asleep.
+  pinMode(XBEE_SLEEPRQ_PIN, OUTPUT);
+  digitalWrite(XBEE_SLEEPRQ_PIN, LOW);
 
   //Main Setup Function. Will run until setup is completed, or until 5 tries has been completed.
   //If it fails after 5 tries the device will not be to work and will attempt to broadcast a message
@@ -1186,14 +1249,9 @@ void setup()
   {
     deviceSetupComplete = DeviceInitialization();
     count++;
-    //delay(60000);
 
   } while (!deviceSetupComplete && count < 5);
 
-  while (!deviceSetupComplete)
-  {
-    //Broadcast failure or simply wait for a command packet.
-  }
 
   ///// Sensor Integration Code /////
   //pinMode(13, OUTPUT); //LED

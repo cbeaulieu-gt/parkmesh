@@ -1,7 +1,7 @@
 #include <XBee.h>
 #include <Printers.h>
 #include <AltSoftSerial.h>
-#include <avr/sleep.h>
+
 // DONT CHANGE THESE DECLARATIONS++++++++++++++++++
 
 AltSoftSerial SoftSerial;
@@ -250,7 +250,7 @@ bool GetLocalNodeInformation()
     }
     else
     {
-      DebugSerial.println(F("The response was not succesful while getting local serial high."));
+      DebugSerial.println(F("The response was not succesful."));
     }
   }
 
@@ -312,7 +312,7 @@ bool GetLocalNodeInformation()
     }
     else
     {
-      DebugSerial.println(F("The response was not succesful while getting local serial low."));
+      DebugSerial.println(F("The response was not succesful."));
     }
   }
 
@@ -374,7 +374,7 @@ bool SendATCommand(uint8_t command[], uint8_t commandValue)
     }
     else
     {
-      DebugSerial.println(F("The response was not succesful while setting Network Discovery options."));
+      DebugSerial.println(F("The response was not succesful."));
     }
   }
 
@@ -582,7 +582,7 @@ bool FindNodes()
     }
     else
     {
-      DebugSerial.println(F("The response was not successful while doing Find Neighbors."));
+      DebugSerial.println(F("The response was not successful."));
     }
   }
 
@@ -729,7 +729,7 @@ bool NetworkDiscovery()
     }
     else
     {
-      DebugSerial.println(F("The response was not successful while doing Network Discovery."));
+      DebugSerial.println(F("The response was not successful."));
     }
   }
 
@@ -1096,16 +1096,14 @@ void HubLoop()
   bool packetRecieved = false;
   packetRecieved = WaitForPacket(waitTime);
   String stringToSend;
-  
-  //Send a flag to PI.
-  DebugSerial.println("qwerty");
 
   if (packetRecieved)
   {
 	  stringToSend = Concatenate(dataPacket);
   }
 
-  DebugSerial.println(stringToSend);
+  DebugSerial.print("qwerty" + stringToSend);
+  DebugSerial.println("");
   ClearDataArray();
 }
 
@@ -1179,17 +1177,26 @@ bool DeviceInitialization()
   //that we get a suitable reply in the subsequent broadcasts.
   do
   {
-    discoveredNodes = FindNodes();
-    SortNodeArray();
 
-    //Need to determine how many of the neighbors we want to send to. The default range will be within 3
-    //hops of the current node, in the direction of the hub.
-    neighborsSelected = SelectNeighbors();
-
-    //Last initialization comdition complete
-    if (neighborsSelected || isHub)
+    //If the node is the Hub. it should not need to select neighbors.
+    if(!isHub)
+    {
+      discoveredNodes = FindNodes();
+      SortNodeArray();
+  
+      //Need to determine how many of the neighbors we want to send to. The default range will be within 3
+      //hops of the current node, in the direction of the hub.
+      neighborsSelected = SelectNeighbors();
+  
+      //Last initialization comdition complete
+      if (neighborsSelected)
+        initializationComplete = true; 
+    }
+    else
+    {
+      neighborsSelected = true;
       initializationComplete = true;
-
+    }
   } while (millis() - initializationStartTime < deviceInitializationTime && !neighborsSelected);
 
   //Print all found nodes.
@@ -1215,22 +1222,15 @@ bool DeviceInitialization()
 	pinMode(XBEE_SLEEPRQ_PIN, OUTPUT);
 	digitalWrite(XBEE_SLEEPRQ_PIN, HIGH);
   }
-  //DebugSerial.print(F("At initialization complete transmitDataIndex: "));
-  //DebugSerial.println(transmitDataIndex);
+  DebugSerial.print(F("At initialization complete transmitDataIndex: "));
+  DebugSerial.println(transmitDataIndex);
   DebugSerial.println(F("All initialization steps complete. Waiting to start."));
 
   //This is an extra layer, that is meant to prevent the need for interrupts in the previous loop.
   do {} while (millis() - initializationStartTime < (deviceInitializationTime + 5000));
   return true;
 }
-void wakeUpNow()        // here the interrupt is handled after wakeup
-{
-  // execute code here after wake-up before returning to the loop() function
-  // timers and code using timers (serial.print and more...) will not work here.
-  // we don't really need to execute any special functions here, since we
-  // just want the thing to wake up
-  Serial.println("I woke up");
-}
+
 //Main Functions=============================================================================
 
 
@@ -1280,17 +1280,17 @@ void loop()
 
   if (originNode)
   {
-    AppendSensorData();
     do
     {
+		AppendSensorData();
       packetTransmitted = TransmitData();
     } while (!packetTransmitted);
     do {} while (millis() - cycleDuration < cycleStartTime);
   }
   else if (isHub)
-    {
-     HubLoop();
-    }
+  {
+    HubLoop();
+  }
   else
   {
     if (backupOriginNode)
@@ -1325,25 +1325,7 @@ void loop()
       if (packetRecieved && !packetTransmitted)
       {
         AppendSensorData();
-        packetTransmitted = TransmitData(); 
-        /*sleep_enable();
-
-        set_sleep_mode(SLEEP_MODE_PWR_DOWN);   // sleep mode is set here
-
-        sleep_enable();          // enables the sleep bit in the mcucr register
-        // so sleep is possible. just a safety pin
-
-
-
-        attachInterrupt(digitalPinToInterrupt(2), wakeUpNow, CHANGE);// wakeUpNow when pin 2 gets LOW
-        Serial.println("Help!!! They are putting me to sleep");
-        sleep_mode();            // here the device is actually put to sleep!!
-        // THE PROGRAM CONTINUES FROM HERE AFTER WAKING UP
-
-        sleep_disable();         // first thing after waking from sleep:
-        // disable sleep...
-        detachInterrupt(digitalPinToInterrupt(2));*/
-
+        packetTransmitted = TransmitData();
       }
       else
       {

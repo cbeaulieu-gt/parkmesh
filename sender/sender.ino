@@ -250,7 +250,7 @@ bool GetLocalNodeInformation()
     }
     else
     {
-      DebugSerial.println(F("The response was not succesful."));
+      DebugSerial.println(F("The response was not succesful while getting local serial high."));
     }
   }
 
@@ -312,7 +312,7 @@ bool GetLocalNodeInformation()
     }
     else
     {
-      DebugSerial.println(F("The response was not succesful."));
+      DebugSerial.println(F("The response was not succesful while getting local serial low."));
     }
   }
 
@@ -374,7 +374,7 @@ bool SendATCommand(uint8_t command[], uint8_t commandValue)
     }
     else
     {
-      DebugSerial.println(F("The response was not succesful."));
+      DebugSerial.println(F("The response was not succesful while setting Network Discovery options."));
     }
   }
 
@@ -582,7 +582,7 @@ bool FindNodes()
     }
     else
     {
-      DebugSerial.println(F("The response was not successful."));
+      DebugSerial.println(F("The response was not successful while doing Find Neighbors."));
     }
   }
 
@@ -1222,8 +1222,8 @@ bool DeviceInitialization()
 	pinMode(XBEE_SLEEPRQ_PIN, OUTPUT);
 	digitalWrite(XBEE_SLEEPRQ_PIN, HIGH);
   }
-  DebugSerial.print(F("At initialization complete transmitDataIndex: "));
-  DebugSerial.println(transmitDataIndex);
+  //DebugSerial.print(F("At initialization complete transmitDataIndex: "));
+  //DebugSerial.println(transmitDataIndex);
   DebugSerial.println(F("All initialization steps complete. Waiting to start."));
 
   //This is an extra layer, that is meant to prevent the need for interrupts in the previous loop.
@@ -1233,10 +1233,8 @@ bool DeviceInitialization()
 
 //Main Functions=============================================================================
 
-
 void setup()
 {
-
 
   // Initiliaze the hardware and software serial.
   DebugSerial.begin(115200);
@@ -1280,9 +1278,11 @@ void loop()
 
   if (originNode)
   {
+
     do
     {
 		AppendSensorData();
+
       packetTransmitted = TransmitData();
     } while (!packetTransmitted);
     do {} while (millis() - cycleDuration < cycleStartTime);

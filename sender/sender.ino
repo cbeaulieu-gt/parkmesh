@@ -56,11 +56,11 @@ uint8_t dataPacket[MAX_NODES];
 //placed here.
 
 ///// Sensor Integration Code /////
-/*const int analogInPin = A0;  // Analog input pin that the IR sensor is attached to
+const int analogInPin = A0;  // Analog input pin that the IR sensor is attached to
 int sensorValue = 0;        // value read from the IR sensor
 float voltage = 0.0;        // IR sensor value in floating point arithmetic
 float distance = 0.0;       // Distance of the object detected to the IR sensor.
-boolean isCarParked = false;*/  //TRUE if a car is detected and FALSE if a car is not detected.
+boolean isCarParked = false; //TRUE if a car is detected and FALSE if a car is not detected.
 ///// Sensor Integration Code End /////
 
 Node LocalNode;
@@ -778,13 +778,8 @@ bool SelectNeighbors()
 //Retrieve data from the sensor device.
 uint8_t GetSensorData()
 {
-  //For now this function will simply get a random piece of data. Either a zero or a one.
-  uint8_t randomSignal = random(2);
-  DebugSerial.print(F("Generated Signal: "));
-  DebugSerial.println(randomSignal);
-
   ///// Sensor Integration Code /////
-  /*digitalWrite(12, HIGH);
+  digitalWrite(12, HIGH);
   uint8_t carParked = 0;
   delay(100); // wait for sensor output to stabilize
   // read the analog in value:
@@ -810,10 +805,10 @@ uint8_t GetSensorData()
     carParked = 1;
   }
   digitalWrite(12, LOW);
-  return carParked;*/
+  DebugSerial.print(F("Car Parked: "));
+  DebugSerial.printlncarParked);
+  return carParked;
   ///// Sensor Integration Code End /////
-
-  return randomSignal;
 }
 
 //This function will grab the sensor data and will append it to the end of the data array.
@@ -1259,9 +1254,9 @@ void setup()
 
 
   ///// Sensor Integration Code /////
-  //pinMode(13, OUTPUT); //LED
-  //pinMode(12, OUTPUT);
-  //digitalWrite(12, LOW);
+  pinMode(13, OUTPUT); //LED
+  pinMode(12, OUTPUT);
+  digitalWrite(12, LOW);
   ///// Sensor Integration Code End /////
   DebugSerial.println(F("Network loop starting now..."));
 

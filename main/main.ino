@@ -806,7 +806,7 @@ uint8_t GetSensorData()
   }
   digitalWrite(12, LOW);
   DebugSerial.print(F("Car Parked: "));
-  DebugSerial.printlncarParked);
+  DebugSerial.println(carParked);
   return carParked;
   ///// Sensor Integration Code End /////
 }
